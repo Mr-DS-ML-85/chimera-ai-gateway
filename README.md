@@ -134,7 +134,7 @@ cp .env.example .env
 # Edit .env and add at least one key
 
 # 4. Run
-python chimera_gateway.py
+python main.py
 
 # 5. Test it
 curl http://localhost:8000/health
