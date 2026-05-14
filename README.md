@@ -758,7 +758,7 @@ pytest tests/ -v        # all tests must pass before PR
 
 ## 📄 License
 
-MIT — see [LICENSE](https://arena.ai/c/LICENSE).
+MIT — see [LICENSE](LICENSE).
 
 ## 🙏 Credits
 
