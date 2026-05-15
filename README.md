@@ -15,7 +15,7 @@
 [![Coverage](https://img.shields.io/badge/Coverage-95%25-brightgreen?style=for-the-badge)](htmlcov/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-ff69b4?style=for-the-badge)](CONTRIBUTING.md)
 
-**One endpoint. 15 free providers. Zero vendor lock-in. Full security.**
+**One endpoint. 20+ providers. Zero vendor lock-in. Full security.**
 
 [🚀 Quick Start](#-quick-start) · [📖 Docs](docs/) · [🛡️ Security](docs/SECURITY.md) · [🧪 Testing](tests/) · [🌐 Live Demo](#)
 
