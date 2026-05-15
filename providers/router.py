@@ -7,15 +7,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from core.config import ROUTE_BY
-from core.logging_setup import logger
-from providers.auto_models import effective_models
-from providers.capabilities import ProviderCaps
-from providers.catalogue import PROVIDER_CATALOGUE, PROVIDER_ENABLED
-from providers.rate_limiter import rate_limiter
-from security.ssrf import assert_safe
+from chimera.core.config import ROUTE_BY
+from chimera.core.logging_setup import logger
+from chimera.providers.auto_models import effective_models
+from chimera.providers.capabilities import ProviderCaps
+from chimera.providers.catalogue import PROVIDER_CATALOGUE, PROVIDER_ENABLED
+from chimera.providers.rate_limiter import rate_limiter
+from chimera.security.ssrf import assert_safe
 
-from providers.virtual_routes import RouteSpec
+from chimera.providers.virtual_routes import RouteSpec
 
 # Shared HTTP client — set by lifespan in api/app.py
 _http_client: Optional[httpx.AsyncClient] = None
@@ -153,16 +153,28 @@ async def sorted_pairs(
 
 def _infer_provider_affinity(model_id: str) -> Optional[str]:
     """Return provider name inferred from model ID naming convention."""
-    if model_id.startswith("@cf/"):
+    # Strip provider prefix if present
+    m = model_id
+    if model_id:
+        parts = model_id.split("/")
+        if parts[0] in {
+            "openrouter", "nvidia", "groq", "google", "cloudflare",
+            "github", "a4f", "cerebras", "pollinations", "ollama",
+            "custom", "huggingface", "sambanova", "together", "llm7",
+            "mistral", "xai", "deepseek", "perplexity", "fireworks", "deepinfra",
+        }:
+            m = "/".join(parts[1:])
+
+    if m.startswith("@cf/"):
         return "cloudflare"
-    if model_id.startswith("accounts/fireworks/"):
+    if m.startswith("accounts/fireworks/"):
         return "fireworks"
     _OPENROUTER_ORGS = (
         "meta-llama/", "google/", "mistralai/", "nvidia/",
         "deepseek/", "qwen/", "arcee-ai/", "microsoft/",
         "openai/", "nousresearch/", "cognitivecomputations/",
     )
-    if "/" in model_id and any(model_id.startswith(o) for o in _OPENROUTER_ORGS):
+    if "/" in m and any(m.startswith(o) for o in _OPENROUTER_ORGS):
         return "openrouter"
     return None
 
@@ -210,15 +222,23 @@ def eligible_pairs(
         # returns False (e.g. "llama3.3-70b" sent explicitly to Cerebras).
         direct_model = body.get("model", "").strip() if route is None else ""
 
+        # Strip provider prefix if present (e.g. "openrouter/meta-llama/..." → "meta-llama/...")
+        raw_model = direct_model
+        if direct_model and "/" in direct_model:
+            parts = direct_model.split("/")
+            if parts[0] in {p["name"] for p in PROVIDER_CATALOGUE}:
+                raw_model = "/".join(parts[1:])
+
         if route is not None or not direct_model:
             models = effective_models(provider, bucket)
         else:
             nr = effective_models(provider, "non_reasoning")
             r  = effective_models(provider, "reasoning")
-            if direct_model in nr:
-                models = [direct_model]
-            elif direct_model in r:
-                models = [direct_model]
+            # Check both the raw model and the prefixed model
+            if raw_model in nr or direct_model in nr:
+                models = [raw_model]
+            elif raw_model in r or direct_model in r:
+                models = [raw_model]
             else:
                 models = []  # provider doesn't own this model — skip cleanly
 
@@ -269,16 +289,28 @@ def select_model_for_provider(
 ) -> Optional[str]:
     """
     For virtual models, use the provider's best model for the chosen bucket.
-    For direct models, require that the exact model exists.
+      - fast/auto mode → pick first model (lowest latency)
+      - quality mode   → pick last model (highest quality — pro, 70b, etc.)
+    For direct models, require that the exact model (or prefixed version) exists.
+    Returns the canonical (unprefixed) model name to send upstream.
     """
     if not model_list:
         return None
 
     if route is not None:
+        if route.mode and route.mode.startswith("quality"):
+            return model_list[-1]
         return model_list[0]
 
-    if requested_model and requested_model in model_list:
-        return requested_model
+    # Strip provider prefix from requested_model
+    raw_requested = requested_model
+    if requested_model and "/" in requested_model:
+        parts = requested_model.split("/")
+        if parts[0] in {p["name"] for p in PROVIDER_CATALOGUE}:
+            raw_requested = "/".join(parts[1:])
+
+    if raw_requested and raw_requested in model_list:
+        return raw_requested
 
     return None
 
@@ -295,8 +327,78 @@ async def call_provider(
     request_id: str,
 ) -> Tuple[Optional[Any], int, Optional[str]]:
     name = provider["name"]
+
+    # ── Virtual routing: resolve "auto/X" model to actual provider routing ───
+    # Allows callers to use "auto/auto", "auto/fast", "auto/quality" etc.
+    # by stripping the "auto/" prefix and re-invoking virtual route resolution.
+    upstream_model = model
+    if model.startswith("auto/"):
+        virt_id = model[5:]  # e.g. "auto/fast" → "fast"
+        from chimera.providers.virtual_routes import resolve_virtual_model
+        inner_route = resolve_virtual_model(
+            virt_id,
+            reasoning_hint=infer_reasoning(body),
+        )
+        if inner_route:
+            # Re-invoke routing with the inner virtual spec so the same
+            # provider-chain logic (free_only, bucket, preferred_providers) is
+            # applied to the current provider.
+            body = dict(body)
+            body["_route_mode"] = inner_route.mode
+            if inner_route.free_only:
+                body["_free_only"] = True
+            body["_quarantined"] = set()
+            pairs = eligible_pairs(body, vk_record=None, route=inner_route)
+            if pairs:
+                ordered = sorted(
+                    [(p, ml) for p, ml in pairs if p["name"] == name],
+                    key=lambda t: t[0].get("priority", 99),
+                )
+                if ordered:
+                    selected = select_model_for_provider(
+                        provider=name,
+                        model_list=ordered[0][1],
+                        requested_model=virt_id,
+                        route=inner_route,
+                    )
+                    if selected:
+                        upstream_model = selected
+
+    # Strip provider prefix from model ID before sending to upstream.
+    # e.g. "openrouter/meta-llama/llama-4-scout" → "meta-llama/llama-4-scout"
+    # e.g. "nvidia/deepseek-ai/deepseek-r1" → "deepseek-ai/deepseek-r1"
+    if "/" in upstream_model:
+        prefix = upstream_model.split("/")[0]
+        # Only strip if the prefix matches a known provider name
+        if prefix in {p["name"] for p in PROVIDER_CATALOGUE}:
+            upstream_model = "/".join(upstream_model.split("/")[1:])
+
+    # Strip :free suffix from OpenRouter free-tier model IDs.
+    # OpenRouter API rejects the :free suffix in the model field —
+    # free models are automatically selected based on the API key / account tier.
+    if name == "openrouter" and upstream_model.endswith(":free"):
+        upstream_model = upstream_model[:-5]
+
+    # MiniMax: strip base64 inline images (not supported — causes HTTP 400).
+    # MiniMax only supports: text, image_url (URL), video_url.
+    payload = dict(body)
+    payload["model"] = upstream_model
+    if name == "minimax":
+        for msg in payload.get("messages", []):
+            content = msg.get("content")
+            if isinstance(content, list):
+                msg["content"] = [
+                    part for part in content
+                    if not (
+                        isinstance(part, dict)
+                        and part.get("type") == "image_url"
+                        and isinstance(part.get("url"), str)
+                        and part["url"].startswith("data:")
+                    )
+                ]
+
     if provider.get("name") == "cloudflare":
-        url = provider["base_url"].rstrip("/") + provider["chat_path"] + "/" + model
+        url = provider["base_url"].rstrip("/") + provider["chat_path"] + "/" + upstream_model
     else:
         url = provider["base_url"].rstrip("/") + provider["chat_path"]
 
@@ -310,8 +412,6 @@ async def call_provider(
     if provider.get("api_key"):
         headers["Authorization"] = f"Bearer {provider['api_key']}"
 
-    payload = dict(body)
-    payload["model"] = model
     for field in ("reasoning", "encrypt", "_route_mode", "_free_only", "_quarantined"):
         payload.pop(field, None)
 

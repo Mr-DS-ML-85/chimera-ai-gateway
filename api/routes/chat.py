@@ -10,23 +10,23 @@ import hmac as _hmac
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.middleware import client_ip
-from core.config import GATEWAY_VERSION, MAX_BODY_BYTES, WAF_RULE_VERSION, CHIMERA_API_KEY, JWKS_URI
-from core.logging_setup import logger
-from cost.tracker import record as record_cost
-from crypto.e2ee import encrypt as e2ee_encrypt
-from providers.router import call_provider, eligible_pairs, select_model_for_provider, sorted_pairs, infer_reasoning
-from providers.rate_limiter import rate_limiter
-from security import canary, nonce
-from security.content_policy import scan as policy_scan
-from security.output_guard import screen_json, screen_text
-from security.pii import redact as pii_redact
-from security.pii import redact_response
-from security.waf import extract_text_content, scan_body as waf_scan_body
-from security.prompt_shield import scan_body as shield_scan_body
-from transparency.log import append as log_append
-from providers.virtual_routes import resolve_virtual_model, RouteSpec
-from keys.virtual_keys import allows_model, rpm_ok, resolve_vk
+from chimera.api.middleware import client_ip
+from chimera.core.config import GATEWAY_VERSION, MAX_BODY_BYTES, WAF_RULE_VERSION, CHIMERA_API_KEY, JWKS_URI
+from chimera.core.logging_setup import logger
+from chimera.cost.tracker import record as record_cost
+from chimera.crypto.e2ee import encrypt as e2ee_encrypt
+from chimera.providers.router import call_provider, eligible_pairs, select_model_for_provider, sorted_pairs, infer_reasoning
+from chimera.providers.rate_limiter import rate_limiter
+from chimera.security import canary, nonce
+from chimera.security.content_policy import scan as policy_scan
+from chimera.security.output_guard import screen_json, screen_text
+from chimera.security.pii import redact as pii_redact
+from chimera.security.pii import redact_response
+from chimera.security.waf import extract_text_content, scan_body as waf_scan_body
+from chimera.security.prompt_shield import scan_body as shield_scan_body
+from chimera.transparency.log import append as log_append
+from chimera.providers.virtual_routes import resolve_virtual_model, RouteSpec
+from chimera.keys.virtual_keys import allows_model, rpm_ok, resolve_vk
 
 # Runtime quarantine — models that returned model_terms_required are
 # excluded for the lifetime of this process without a restart.
@@ -41,7 +41,7 @@ async def _authenticate(
     request: Request,
 ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """Returns (jwt_payload|None, vk_record|None)."""
-    from api.routes.admin import _validate_jwt  # avoid circular at module level
+    from chimera.api.routes.admin import _validate_jwt  # avoid circular at module level
 
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -53,7 +53,7 @@ async def _authenticate(
 
     # 1. JWT
     if JWKS_URI:
-        from providers.router import get_http_client
+        from chimera.providers.router import get_http_client
         payload = await _validate_jwt(token, get_http_client())
         if payload is None:
             raise HTTPException(401, "Invalid JWT")
@@ -87,6 +87,18 @@ def _route_headers(provider_name: str, request_id: str, cost: Optional[float] = 
 
 def _is_virtual_model(model: str) -> bool:
     m = (model or "").strip().lower()
+    # Strip provider prefix if present (e.g. "openrouter/meta-llama/..." → "meta-llama/...")
+    # so that virtual model detection works for both prefixed and raw model IDs
+    if "/" in m:
+        parts = m.split("/")
+        if parts[0] in {
+            "openrouter", "nvidia", "groq", "google", "cloudflare",
+            "github", "a4f", "cerebras", "pollinations", "ollama",
+            "custom", "huggingface", "sambanova", "together", "llm7",
+            "mistral", "xai", "deepseek", "perplexity", "fireworks",
+            "deepinfra", "auto",
+        }:
+            m = "/".join(parts[1:])
     return m in {
         "auto",
         "auto:free",
@@ -95,10 +107,13 @@ def _is_virtual_model(model: str) -> bool:
         "auto:free:reasoning",
         "auto:free:non-reasoning",
         "fast",
+        "fast:free",
         "quality",
         "balanced",
         "reasoning",
+        "reasoning:free",
         "non-reasoning",
+        "non-reasoning:free",
     }
 
 
@@ -345,7 +360,7 @@ async def chat_completions(request: Request):
                 "id":      raw_data.get("id", "cf-response"),
                 "object":  "chat.completion",
                 "created": __import__("time").time_ns() // 1_000_000_000,
-                "model":   body.get("model", "cloudflare"),
+                "model":   model,
                 "choices": [{
                     "index": 0,
                     "message": {"role": "assistant", "content": cf_text},

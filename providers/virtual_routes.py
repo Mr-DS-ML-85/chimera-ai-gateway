@@ -17,44 +17,42 @@ def _chain(bucket: str, free_only: bool, mode: str) -> Tuple[str, ...]:
         chain = (
             "openrouter",
             "groq",
-            "cerebras",
-            "google",
-            "huggingface",
-            "cloudflare",
             "nvidia",
+            "deepseek",
+            "google",
+            "cloudflare",
+            "huggingface",
             "ollama",
         )
     else:
         if mode == "fast":
             chain = (
                 "groq",
-                "nvidia",
-                "cloudflare",
                 "openrouter",
-                "cerebras",
-                "google",
+                "cloudflare",
+                "nvidia",
                 "huggingface",
                 "ollama",
             )
         elif mode == "quality":
             chain = (
-                "google",
                 "openrouter",
-                "cerebras",
+                "google",
                 "groq",
                 "cloudflare",
                 "nvidia",
+                "deepseek",
                 "huggingface",
                 "ollama",
             )
-        else:
+        else:  # balanced / auto
             chain = (
                 "groq",
                 "openrouter",
                 "cloudflare",
                 "nvidia",
                 "google",
-                "cerebras",
+                "deepseek",
                 "huggingface",
                 "ollama",
             )
@@ -67,6 +65,7 @@ def resolve_virtual_model(requested_model: str, reasoning_hint: bool = False) ->
     if not model:
         return None
 
+    # Direct aliases without :auto prefix
     if model in {"reasoning", "non-reasoning", "fast", "quality", "balanced"}:
         bucket = "reasoning" if model == "reasoning" else "non_reasoning"
         return RouteSpec(
@@ -74,6 +73,70 @@ def resolve_virtual_model(requested_model: str, reasoning_hint: bool = False) ->
             bucket=bucket,
             free_only=False,
             preferred_providers=_chain(bucket, False, model),
+        )
+
+    # Free variants of direct aliases
+    if model in {"reasoning:free", "non-reasoning:free", "fast:free", "quality:free", "balanced:free"}:
+        base = model.replace(":free", "")
+        bucket = "reasoning" if base == "reasoning" else "non_reasoning"
+        return RouteSpec(
+            mode=model,
+            bucket=bucket,
+            free_only=True,
+            preferred_providers=_chain(bucket, True, base),
+        )
+
+    # ── Legacy /v1/ shorthand aliases ───────────────────────────────────────────
+    # These allow callers to use short forms like "auto" alone (no colon)
+    # and match the virtual route patterns users expect from Open WebUI.
+    # Map to the full "auto:..." semantics.
+    if model == "auto":
+        # Default: non-reasoning (fast by default)
+        return RouteSpec(
+            mode="auto",
+            bucket="non_reasoning",
+            free_only=False,
+            preferred_providers=_chain("non_reasoning", False, "fast"),
+        )
+
+    if model == "auto:free":
+        return RouteSpec(
+            mode="auto:free",
+            bucket="non_reasoning",
+            free_only=True,
+            preferred_providers=_chain("non_reasoning", True, "fast"),
+        )
+
+    if model == "auto:reasoning":
+        return RouteSpec(
+            mode="auto:reasoning",
+            bucket="reasoning",
+            free_only=False,
+            preferred_providers=_chain("reasoning", False, "auto"),
+        )
+
+    if model == "auto:non-reasoning":
+        return RouteSpec(
+            mode="auto:non-reasoning",
+            bucket="non_reasoning",
+            free_only=False,
+            preferred_providers=_chain("non_reasoning", False, "auto"),
+        )
+
+    if model == "auto:free:reasoning":
+        return RouteSpec(
+            mode="auto:free:reasoning",
+            bucket="reasoning",
+            free_only=True,
+            preferred_providers=_chain("reasoning", True, "auto"),
+        )
+
+    if model == "auto:free:non-reasoning":
+        return RouteSpec(
+            mode="auto:free:non-reasoning",
+            bucket="non_reasoning",
+            free_only=True,
+            preferred_providers=_chain("non_reasoning", True, "auto"),
         )
 
     if not model.startswith("auto"):
@@ -85,7 +148,7 @@ def resolve_virtual_model(requested_model: str, reasoning_hint: bool = False) ->
     free_only = "free" in tokens
     if "reasoning" in tokens:
         bucket = "reasoning"
-    elif "non-reasoning" in tokens:
+    elif "non-reasoning" in tokens or "nonreasoning" in tokens:
         bucket = "non_reasoning"
     else:
         bucket = "reasoning" if reasoning_hint else "non_reasoning"

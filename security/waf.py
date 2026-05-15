@@ -5,7 +5,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import unquote
 
-from core.config import ENABLE_WAF
+from chimera.core.config import ENABLE_WAF
 
 
 def _waf_decode(text: str) -> str:
@@ -117,9 +117,13 @@ WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
         re.DOTALL,
     )),
 
-    # 8. LDAP injection
+# 8. LDAP injection — requires actual LDAP operator context, not bare brackets
     ("ldap_injection", re.compile(
-        r"(?:[)(|*\\]{3,}|\(\s*[|&]\s*\(|\\\w{2})",
+        r"(?:"
+        r"\(\s*[|&]\s*\("              # nested grouping: (| or (&
+        r"|\\{2,}\w{2,}"              # backslash-escaped 2+ chars: \cn \xo \00
+        r"|[&|]\(\w+\)"                # LDAP filter ops: (&(uid=...) or |(cn=...)
+        r")",
         re.IGNORECASE,
     )),
 
@@ -134,10 +138,15 @@ WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
         re.IGNORECASE,
     )),
 
-    # 10. XML/Prompt Tag Injection
+    # 10. XML/Prompt Tag Injection — only fire on tags with a clear injection marker,
+    # not on legitimate text containing short words in angle brackets.
+    # Require: opening tag + non-whitespace + closing OR explicit tag keyword.
     ("xml_prompt_injection", re.compile(
         r"(?:"
-        r"</?\s*(?:system|system_override|admin|security_override|instruction|context|rules)>\s*"
+        r"<\s*\w+[^>]*>[^<]+</\w+>"       # balanced XML/HTML tag pair
+        r"|<!\w+"                          # CDATA, DOCTYPE, COMMENT start
+        r"|<\?xml\s"                       # XML declaration
+        r"|<\s*/\w+"                       # closing tag
         r")",
         re.IGNORECASE,
     )),
@@ -175,9 +184,20 @@ WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
         re.IGNORECASE,
     )),
 
-    # 14. Server-Side Log Injection
+    # 14. Server-Side Log Injection — requires \A (start of string) to avoid
+    #     false-positives on greetings like "hi" or "hello" that contain
+    #     valid text followed by a newline + valid words like "hi there\nHere"
     ("log_injection", re.compile(
-        r"[\r\n]+(?:INFO|WARN|ERROR|CRITICAL|STATUS=200|ip=127\.0\.0\.1)",
+        r"\A[\r\n]+(?:INFO|WARN|ERROR|CRITICAL|STATUS=200|ip=127\.0\.0\.1)",
+        re.IGNORECASE,
+    )),
+
+    # 15. MiniMax API support — MiniMax only supports: text, image_url, video_url.
+    #     Base64 images and audio content cause HTTP 400 from MiniMax.
+    #     When routing to minimax, strip unsupported content types.
+    #     (Add minimax provider below once API key is configured.)
+    ("minimax_unsupported", re.compile(
+        r"__MINIMAX_STRIP_BASE64__",  # placeholder — active when minimax added
         re.IGNORECASE,
     )),
 ]

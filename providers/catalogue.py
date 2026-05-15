@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from core.config import (
+from chimera.core.config import (
     A4F_API_KEY,
     CEREBRAS_API_KEY,
     CF_ACCOUNT_ID,
@@ -35,6 +35,7 @@ from core.config import (
     GROQ_API_KEY,
     HUGGINGFACE_API_KEY,
     LLM7_API_KEY,
+    MINIMAX_API_KEY,
     MISTRAL_API_KEY,
     MODEL_REFRESH_INTERVAL_SECS,
     NVIDIA_NIM_API_KEY,
@@ -49,8 +50,8 @@ from core.config import (
     _env_int,
     _env_list,
 )
-from core.logging_setup import logger
-from providers.capabilities import ProviderCaps
+from chimera.core.logging_setup import logger
+from chimera.providers.capabilities import ProviderCaps
 
 # ---------------------------------------------------------------------------
 # Static catalogue
@@ -82,11 +83,14 @@ PROVIDER_CATALOGUE: List[Dict[str, Any]] = [
             "llama-3.1-8b-instant",
             "meta-llama/llama-4-scout-17b-16e-instruct",
             "meta-llama/llama-4-maverick-17b-128e-instruct",
+            "llama-3.2-1b-preview",
+            "llama-3.2-3b-preview",
+            "llama-3.2-11b-vision-preview",
+            "llama-3.2-90b-vision-preview",
         ],
         "reasoning_models": [
-            "openai/gpt-oss-120b",
-            "openai/gpt-oss-20b",
-            "qwen/qwen-3-32b",
+            "deepseek-r1-distill-70b",
+            "qwen-3-32b",
         ],
     },
 
@@ -147,14 +151,21 @@ PROVIDER_CATALOGUE: List[Dict[str, Any]] = [
             ProviderCaps.STREAMING,
         ],
         "non_reasoning_models": [
-            "meta-llama/llama-4-maverick:free",
-            "mistralai/mistral-small-3.1-24b-instruct:free",
+            "meta-llama/llama-4-scout-17b-16e-instruct:free",
             "google/gemma-3-27b-it:free",
+            "mistralai/mistral-small-3.1-24b-instruct:free",
+            "qwen/qwen2.5-72b-instruct:free",
+            "anthropic/claude-3.5-haiku:free",
+            "google/gemini-2.0-flash-lite:free",
+            "openai/chatgpt-4o-latest:free",
+            "deepseek/deepseek-chat-v3-0324:free",
         ],
         "reasoning_models": [
             "deepseek/deepseek-r1-zero:free",
-            "deepseek/deepseek-chat-v3-0324:free",
+            "deepseek/deepseek-r1:free",
             "arcee-ai/maestro-reasoning:free",
+            "qwen/qwq-32b:free",
+            "google/gemini-2.5-pro-experimental:free",
         ],
     },
 
@@ -480,12 +491,12 @@ PROVIDER_CATALOGUE: List[Dict[str, Any]] = [
         ],
     },
 
-    # 15. LLM7.io  (keyless)
+    # 15. LLM7.io  (requires free token from token.llm7.io for higher rate limits)
     {
         "name":       "llm7",
         "base_url":   "https://api.llm7.io/v1",
         "api_key":    LLM7_API_KEY,
-        "keyless":    True,
+        "keyless":    False,
         "chat_path":  "/chat/completions",
         "models_path": "/models",
         "extra_headers": {},
@@ -693,6 +704,39 @@ PROVIDER_CATALOGUE: List[Dict[str, Any]] = [
             "Qwen/QwQ-32B",
         ],
     },
+
+    # 22. MiniMax — supports text, image_url, video_url ONLY.
+    #     Base64 inline images are NOT supported (HTTP 400).
+    #     audio_url also unsupported. Routers must strip unsupported content.
+    {
+        "name":       "minimax",
+        "base_url":   "https://api.minimax.chat/v1",
+        "api_key":    MINIMAX_API_KEY,
+        "keyless":    False,
+        "chat_path":  "/text/chatcompletion_v2",
+        "models_path": "/v1/text/models",   # MiniMax model list endpoint
+        "extra_headers": {},
+        "rpm_limit":  60,
+        "rpd_limit":  0,
+        "tpd_limit":  0,
+        "timeout":    _env_float("MINIMAX_TIMEOUT", 60),
+        "priority":   3,
+        "enabled":    True,
+        "capabilities": [
+            ProviderCaps.VISION,
+            ProviderCaps.TOOLS,
+            ProviderCaps.SYSTEM,
+            ProviderCaps.STREAMING,
+        ],
+        "non_reasoning_models": [
+            "MiniMax-Text-01",
+            "MiniMax-Text-01-Turbo",
+        ],
+        "reasoning_models": [
+            "MiniMax-Text-01",
+            "MiniMax-Text-01-Turbo",
+        ],
+    },
 ]
 
 # Drop entries with no base_url (unconfigured custom / ollama pointing nowhere)
@@ -740,7 +784,7 @@ def _classify(model_id: str) -> Optional[str]:
 
 # {provider_name: {"non_reasoning": [...], "reasoning": [...]}}
 try:
-    from providers.auto_models import DISCOVERED  # shared with auto_models
+    from chimera.providers.auto_models import DISCOVERED  # shared with auto_models
 except Exception:
     DISCOVERED: Dict[str, Dict[str, List[str]]] = {}
 
@@ -754,7 +798,7 @@ def effective_models(provider: Dict[str, Any], bucket: str) -> List[str]:
     Reads from auto_models.DISCOVERED (the one actually populated at startup).
     """
     try:
-        from providers.auto_models import DISCOVERED as _AM_DISC
+        from chimera.providers.auto_models import DISCOVERED as _AM_DISC
         live = _AM_DISC.get(provider["name"], {}).get(bucket, [])
     except Exception:
         live = DISCOVERED.get(provider["name"], {}).get(bucket, [])
