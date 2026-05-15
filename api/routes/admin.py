@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from core.config import ADMIN_API_KEY, GATEWAY_VERSION, JWT_AUDIENCE, JWKS_URI, JWT_ISSUER, WAF_RULE_VERSION
 from core.logging_setup import logger
 from cost.tracker import snapshot as cost_snapshot
+from crypto.e2ee import GW_PUBLIC_KEY_B64, GW_PUBLIC_KEY_FINGERPRINT
 from keys import virtual_keys as vk
 from providers.auto_models import DISCOVERED, effective_models, refresh_all
 from providers.catalogue import PROVIDER_CATALOGUE, PROVIDER_ENABLED
@@ -128,6 +129,13 @@ async def admin_usage(request: Request):
         "gateway_version":    GATEWAY_VERSION,
         "waf_rule_version":   WAF_RULE_VERSION,
         "config_fingerprint": CONFIG_FINGERPRINT,
+        "e2ee": {
+            "enabled":            True,
+            "pubkey_b64":         GW_PUBLIC_KEY_B64,
+            "pubkey_fingerprint": GW_PUBLIC_KEY_FINGERPRINT,
+            "alg":                "X25519-ECDH+HKDF-SHA256+AES-256-GCM",
+            "warning":            "Key regenerated on every process restart.",
+        },
     })
 
 

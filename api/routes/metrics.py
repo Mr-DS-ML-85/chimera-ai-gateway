@@ -7,6 +7,7 @@ from fastapi.responses import PlainTextResponse
 
 from core.config import IS_DEV
 from cost.tracker import snapshot as cost_snapshot
+from crypto.e2ee import GW_PUBLIC_KEY_FINGERPRINT
 from providers.circuit_breaker import CircuitState
 from providers.rate_limiter import rate_limiter
 from security.nonce import local_count as nonce_count
@@ -57,8 +58,11 @@ async def metrics(request: Request):
         "# HELP chimera_nonce_registry_size Active nonces",
         "# TYPE chimera_nonce_registry_size gauge",
         f"chimera_nonce_registry_size {nc} {ts}",
-        "# HELP chimera_log_entries Transparency log entries",
+# HELP chimera_log_entries Transparency log entries
         "# TYPE chimera_log_entries counter",
         f"chimera_log_entries {lc} {ts}",
+        "# HELP chimera_e2ee_enabled E2EE available (1=yes)",
+        "# TYPE chimera_e2ee_enabled gauge",
+        f"chimera_e2ee_enabled{{fingerprint=\"{GW_PUBLIC_KEY_FINGERPRINT}\"}} 1 {ts}",
     ]
     return "\n".join(lines) + "\n"

@@ -198,6 +198,23 @@ async def anthropic_messages(request: Request):
     if canary.scan(json.dumps(openai_body)):
         raise HTTPException(400, {"error": "request_contains_disallowed_patterns"})
 
+# E2EE
+    encrypt_requested = bool(openai_body.get("encrypt", False))
+    cpb64 = request.headers.get("X-Client-Public-Key")
+    client_pub: Optional[bytes] = None
+    if cpb64:
+        try:
+            raw_key = base64.b64decode(cpb64, validate=True)
+            if len(raw_key) != 32:
+                raise ValueError(f"Expected 32 raw bytes, got {len(raw_key)}")
+            client_pub = raw_key
+        except Exception:
+            client_pub = None
+    if encrypt_requested and not client_pub:
+        raise HTTPException(400, {"error": "missing_e2ee_key", "reason": "encrypt=true requires X-Client-Public-Key"})
+    if encrypt_requested and stream:
+        raise HTTPException(400, {"error": "e2ee_stream_unsupported"})
+
     # Virtual routing
     requested_model = str(openai_body.get("model", "")).strip()
     route: Optional[RouteSpec] = resolve_virtual_model(
@@ -232,7 +249,15 @@ async def anthropic_messages(request: Request):
             continue
 
         try:
-            status, raw_data = await call_provider(provider, model, openai_body, rid)
+            result = await call_provider(provider, model, openai_body, stream, rid)
+            if len(result) == 3:
+                resp_val, status, err = result
+                if resp_val is None:
+                    last_error = err
+                    continue
+                raw_data = resp_val
+            else:
+                status, raw_data = result
         except Exception as exc:
             logger.error("provider_error provider=%s model=%s error=%s",
                          provider_name, model, exc)
@@ -309,6 +334,12 @@ async def anthropic_messages(request: Request):
                 "output_tokens": usage.get("completion_tokens", 0),
             },
         }
+
+        # E2EE
+        if encrypt_requested and client_pub:
+            for block in content_blocks:
+                if block.get("type") == "text":
+                    block["text"] = e2ee_encrypt(block["text"], client_pub)
 
         resp_headers = {
             "X-Provider": provider_name,
