@@ -117,6 +117,211 @@ def _is_virtual_model(model: str) -> bool:
     }
 
 
+# ── Anthropic /v1/messages (Claude Code compatibility) ─────────────────────────
+
+@router.post("/v1/messages")
+async def anthropic_messages(request: Request):
+    """Anthropic messages endpoint — translates to OpenAI format for routing.
+
+    Claude Code, Claude SDK, and other Anthropic-native clients use this.
+    """
+    jwt_payload, vk_record = await _authenticate(request)
+
+    raw = await request.body()
+    if len(raw) > MAX_BODY_BYTES:
+        raise HTTPException(413, "Request body too large")
+
+    try:
+        body: Dict[str, Any] = json.loads(raw or b"{}")
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Invalid JSON")
+
+    # Translate Anthropic → OpenAI format
+    messages = body.get("messages", [])
+    if not isinstance(messages, list) or not messages:
+        raise HTTPException(400, "'messages' must be a non-empty array")
+
+    anthropic_to_openai = {
+        "user":      "user",
+        "assistant": "assistant",
+        "system":    "system",
+    }
+    converted = []
+    for msg in messages:
+        role = anthropic_to_openai.get(msg.get("role", ""), "user")
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            # Claude multi-block content → extract text blocks
+            text_parts = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text_parts.append(block.get("text", ""))
+            content = "\n".join(text_parts)
+        converted.append({"role": role, "content": content})
+
+    openai_body = {
+        "model":     body.get("model", "auto"),
+        "messages":  converted,
+        "max_tokens": body.get("max_tokens", 1024),
+        "stream":    body.get("stream", False),
+        "temperature": body.get("temperature"),
+    }
+    # Strip None values
+    openai_body = {k: v for k, v in openai_body.items() if v is not None}
+
+    # Re-use chat completions logic via a sub-request
+    import uuid as _uuid
+    rid = str(_uuid.uuid4())
+    vk_id = vk_record["key_id"] if vk_record else None
+
+    # WAF
+    waf_hit = waf_scan_body(openai_body)
+    if waf_hit:
+        raise HTTPException(400, {"error": "waf_blocked", "category": waf_hit})
+
+    # Prompt shield
+    shield_hit = shield_scan_body(openai_body)
+    if shield_hit and shield_hit.blocked:
+        raise HTTPException(400, {
+            "error":      "prompt_injection_blocked",
+            "category":   shield_hit.category,
+            "confidence": round(shield_hit.confidence, 2),
+        })
+
+    # Content policy
+    for text in extract_text_content(openai_body):
+        _blocked, _cat = policy_scan(text)
+        if _blocked:
+            raise HTTPException(451, {"error": "content_policy_violation", "category": _cat})
+
+    # Canary
+    if canary.scan(json.dumps(openai_body)):
+        raise HTTPException(400, {"error": "request_contains_disallowed_patterns"})
+
+    # Virtual routing
+    requested_model = str(openai_body.get("model", "")).strip()
+    route: Optional[RouteSpec] = resolve_virtual_model(
+        requested_model,
+        reasoning_hint=infer_reasoning(openai_body),
+    )
+    if route is not None:
+        openai_body["_route_mode"] = route.mode
+        if route.free_only:
+            openai_body["_free_only"] = True
+
+    openai_body["_quarantined"] = _QUARANTINED_MODELS
+    pairs = eligible_pairs(openai_body, vk_record=vk_record, route=route)
+    if not pairs and route is not None and route.free_only:
+        route = replace(route, free_only=False)
+        pairs = eligible_pairs(openai_body, vk_record=vk_record, route=route)
+    if not pairs:
+        raise HTTPException(503, "No providers support the requested capabilities")
+
+    ordered = await sorted_pairs(pairs, route=route)
+    last_error: Optional[str] = None
+
+    for provider, model_list in ordered:
+        provider_name = provider["name"]
+        if not await rate_limiter.is_available(provider_name):
+            last_error = f"Provider '{provider_name}' is rate-limited"
+            continue
+
+        model = select_model_for_provider(provider, model_list, requested_model, route=route)
+        if model is None:
+            last_error = f"No model available for provider '{provider_name}'"
+            continue
+
+        try:
+            status, raw_data = await call_provider(provider, model, openai_body, rid)
+        except Exception as exc:
+            logger.error("provider_error provider=%s model=%s error=%s",
+                         provider_name, model, exc)
+            last_error = str(exc)
+            continue
+
+        if status == 429:
+            last_error = f"Provider '{provider_name}' rate-limited"
+            continue
+
+        if status >= 400:
+            preview = str(raw_data)[:200] if isinstance(raw_data, str) else ""
+            raise HTTPException(502, {
+                "error":   "upstream_error",
+                "provider": provider_name,
+                "status":  status,
+                "preview": preview,
+            })
+
+        # Normalize Cloudflare
+        if (
+            isinstance(raw_data, dict) and "result" in raw_data
+            and "choices" not in raw_data
+        ):
+            cf_text = ""
+            r = raw_data.get("result", {})
+            if isinstance(r, dict):
+                cf_text = r.get("response") or r.get("text") or ""
+            raw_data = {
+                "id":       raw_data.get("id", f"cf-{rid}"),
+                "object":   "chat.completion",
+                "created":  __import__("time").time_ns() // 1_000_000_000,
+                "model":    model,
+                "choices":  [{"index": 0, "message": {"role": "assistant", "content": cf_text},
+                             "finish_reason": "stop"}],
+                "usage":    raw_data.get("result", {}).get("usage", {}),
+            }
+
+        data = canary.scrub(raw_data)
+        data, output_counts = screen_json(data)
+        data, pii_counts = redact_response(data)
+
+        if not isinstance(data, dict):
+            raise HTTPException(502, {
+                "error": "invalid_upstream_response",
+                "provider": provider_name,
+                "detail": f"Expected dict, got {type(data).__name__}",
+            })
+
+        # Translate OpenAI → Anthropic response format
+        choices = data.get("choices", [])
+        content_blocks = []
+        for choice in choices:
+            msg = choice.get("message", {})
+            role = msg.get("role", "assistant")
+            content = msg.get("content", "")
+            if content:
+                content_blocks.append({"type": "text", "text": content})
+
+        if not content_blocks:
+            content_blocks = [{"type": "text", "text": ""}]
+
+        usage = data.get("usage", {})
+        resp = {
+            "id":       data.get("id", f"msg-{rid}"),
+            "type":     "message",
+            "role":     "assistant",
+            "model":    data.get("model", model),
+            "content":  content_blocks,
+            "stop_reason": choices[0].get("finish_reason", "end_turn") if choices else "end_turn",
+            "stop_sequence": None,
+            "usage": {
+                "input_tokens":  usage.get("prompt_tokens", 0),
+                "output_tokens": usage.get("completion_tokens", 0),
+            },
+        }
+
+        resp_headers = {
+            "X-Provider": provider_name,
+            "X-Request-ID": rid,
+            "X-Gateway-Version": GATEWAY_VERSION,
+            "X-WAF-Rule-Version": WAF_RULE_VERSION,
+        }
+
+        return JSONResponse(content=resp, headers=resp_headers)
+
+    raise HTTPException(503, f"All providers failed. Last error: {last_error}")
+
+
 # ── Route ─────────────────────────────────────────────────────────────────────
 
 @router.post("/v1/chat/completions")

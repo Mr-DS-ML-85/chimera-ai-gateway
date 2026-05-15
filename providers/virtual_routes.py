@@ -14,48 +14,88 @@ class RouteSpec:
 
 def _chain(bucket: str, free_only: bool, mode: str) -> Tuple[str, ...]:
     if bucket == "reasoning":
-        chain = (
-            "openrouter",
-            "groq",
-            "nvidia",
-            "deepseek",
-            "google",
-            "cloudflare",
-            "huggingface",
-            "ollama",
-        )
+        if free_only:
+            chain = (
+                "openrouter",
+                "nvidia",
+                "deepseek",
+                "cloudflare",
+                "huggingface",
+            )
+        else:
+            chain = (
+                "openrouter",
+                "groq",
+                "nvidia",
+                "deepseek",
+                "google",
+                "cloudflare",
+                "huggingface",
+                "ollama",
+            )
     else:
         if mode == "fast":
-            chain = (
-                "groq",
-                "openrouter",
-                "cloudflare",
-                "nvidia",
-                "huggingface",
-                "ollama",
-            )
+            if free_only:
+                chain = (
+                    "groq",
+                    "openrouter",
+                    "cloudflare",
+                    "nvidia",
+                    "huggingface",
+                )
+            else:
+                chain = (
+                    "groq",
+                    "openrouter",
+                    "cloudflare",
+                    "nvidia",
+                    "huggingface",
+                    "ollama",
+                )
         elif mode == "quality":
-            chain = (
-                "openrouter",
-                "google",
-                "groq",
-                "cloudflare",
-                "nvidia",
-                "deepseek",
-                "huggingface",
-                "ollama",
-            )
+            if free_only:
+                chain = (
+                    "openrouter",
+                    "google",
+                    "groq",
+                    "cloudflare",
+                    "nvidia",
+                    "deepseek",
+                    "huggingface",
+                )
+            else:
+                chain = (
+                    "openrouter",
+                    "google",
+                    "groq",
+                    "cloudflare",
+                    "nvidia",
+                    "deepseek",
+                    "huggingface",
+                    "ollama",
+                )
         else:  # balanced / auto
-            chain = (
-                "groq",
-                "openrouter",
-                "cloudflare",
-                "nvidia",
-                "google",
-                "deepseek",
-                "huggingface",
-                "ollama",
-            )
+            if free_only:
+                chain = (
+                    "groq",
+                    "openrouter",
+                    "cloudflare",
+                    "nvidia",
+                    "google",
+                    "deepseek",
+                    "huggingface",
+                )
+            else:
+                chain = (
+                    "groq",
+                    "openrouter",
+                    "cloudflare",
+                    "nvidia",
+                    "google",
+                    "deepseek",
+                    "huggingface",
+                    "ollama",
+                )
 
     return chain
 
