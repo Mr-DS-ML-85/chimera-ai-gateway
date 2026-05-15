@@ -21,3 +21,15 @@ dev = [
     "pytest",
     "pytest-asyncio",
 ]
+
+[tool.setuptools]
+package-dir = {"chimera" = ""}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["chimera*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

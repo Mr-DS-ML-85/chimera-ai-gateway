@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -q -r requirements.txt
-          pip install -q pytest pytest-asyncio httpx
+          pip install -q pytest pytest-asyncio
 
       - name: Run tests
         run: PYTHONPATH=. pytest tests/ -v --tb=short
