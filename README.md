@@ -182,7 +182,7 @@ Bash
 
 ```
 # Pollinations.AI works with NO API key — just start and use
-python chimera_gateway.py
+python main.py
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"non-reasoning-auto","messages":[{"role":"user","content":"Tell me a joke"}]}'
