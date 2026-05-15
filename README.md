@@ -1,22 +1,33 @@
-# 🔥 Chimera AI Gateway
 
-**The free, secure, multi-source AI API gateway — 21 providers, one endpoint.**
+<div align="center">
+
+
+# 🔥 Chimera Gateway
+
+### The Free, Secure, Multi-Source AI API Gateway
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111%2B-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen?style=for-the-badge&logo=pytest)](tests/)
 [![Security](https://img.shields.io/badge/Security-AC--1%2FAC--2-red?style=for-the-badge&logo=shield)](docs/SECURITY.md)
-[![Providers](https://img.shields.io/badge/Providers-21-purple?style=for-the-badge)](docs/PROVIDERS.md)
+[![Providers](https://img.shields.io/badge/Providers-15-purple?style=for-the-badge)](docs/PROVIDERS.md)
+[![Coverage](https://img.shields.io/badge/Coverage-95%25-brightgreen?style=for-the-badge)](htmlcov/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-ff69b4?style=for-the-badge)](CONTRIBUTING.md)
 
-**v8.2.0** · One endpoint · 21 providers · Virtual model routing · Claude Code compatible
+**One endpoint. 15 free providers. Zero vendor lock-in. Full security.**
+
+[🚀 Quick Start](#-quick-start) · [📖 Docs](docs/) · [🛡️ Security](docs/SECURITY.md) · [🧪 Testing](tests/) · [🌐 Live Demo](#)
+
+</div>
 
 ---
 
 ## ✨ What Is Chimera Gateway?
 
-Chimera Gateway is a **self-hosted AI API gateway** that routes LLM requests across **21 providers** with intelligent fallback, circuit breakers, and battle-tested security defences.
+Chimera Gateway is a **production-grade, self-hosted AI API gateway** that routes your LLM requests across **15 free providers** with intelligent fallback, latency-aware routing, local Ollama support, and battle-tested security defences directly informed by the **"Your Agent Is Mine"** research paper (arXiv:2604.08407).
 
-Use it as a drop-in replacement for any OpenAI-compatible client — zero code changes.
+Drop in as a replacement for any OpenAI-compatible client — zero code changes required.
 
 ```bash
 # Before (locked to one provider)
