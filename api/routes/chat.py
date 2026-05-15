@@ -198,7 +198,8 @@ async def anthropic_messages(request: Request):
     if canary.scan(json.dumps(openai_body)):
         raise HTTPException(400, {"error": "request_contains_disallowed_patterns"})
 
-# E2EE
+    # E2EE + stream
+    stream = bool(openai_body.get("stream", False))
     encrypt_requested = bool(openai_body.get("encrypt", False))
     cpb64 = request.headers.get("X-Client-Public-Key")
     client_pub: Optional[bytes] = None
