@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Changelog — Chimera Gateway
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
@@ -93,3 +94,26 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Pre-v8.0
 - v8.0 was a significant rewrite. The FastAPI app, routing engine, and security layers were redesigned. Review the v7 → v8 migration guide in docs/ before upgrading from pre-8.0 releases.
+=======
+# Changelog
+
+All notable changes to Chimera Gateway are documented here.
+
+## [Unreleased]
+
+### Added
+- Contributor: Mr-DS-ML-85
+- Model aliases configured via `MODEL_ALIASES_JSON`:
+  - `sonnet-4.6` → `gemini-3.1-flash-lite`
+  - `opus-4.6` → `auto/reasoning:free`
+  - `opus-4.7` → `opencode/minimax-m2.5-free`
+
+### Fixed
+- Import paths: Fixed `ModuleNotFoundError: No module named 'chimera.core'` — changed to relative imports (`from core.config import ...`) for files run from within `chimera/` directory
+- Server now starts correctly via `python3 start.py`
+
+## [8.2.0] - 2026-05-16
+
+### Added
+- Initial Gateway release with multi-provider routing
+>>>>>>> 8c07941 (Fix import paths, add model aliases, add CHANGELOG)
