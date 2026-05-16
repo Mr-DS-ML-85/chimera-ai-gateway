@@ -1,0 +1,99 @@
+# CrowdSec Main Configuration
+# Central configuration for the CrowdSec agent
+#
+# Documentation: https://docs.crowdsec.net/docs/configuration/crowdsec
+
+# Local API configuration
+local_api_credentials:
+  url: http://localhost:6060
+  login: admin
+  password: ${CROWDSEC_LOCAL_API_PASSWORD:-changemechangeme}
+
+# Prometheus metrics
+prometheus:
+  enabled: true
+  level: full
+  listen_addr: 127.0.0.1
+  listen_port: 6061
+
+# API Server configuration
+api:
+  server:
+    listen_uri: 0.0.0.0:6060
+    profiles_path: /etc/crowdsec/config/profiles.yaml
+    console_path: /etc/crowdsec/config/console.yaml
+    online_client: true
+    tls:
+      cert_file: /etc/crowdsec/cert/server.pem
+      key_file: /etc/crowdsec/cert/server.key
+    online_api:
+      credentials_path: /etc/crowdsec/config/online_api_credentials.yaml
+    registration:
+      enabled: false
+
+  client:
+    insecure_skip_verify: false
+    credentials_path: /etc/crowdsec/config/local_api_credentials.yaml
+
+# Acquisition configuration
+acquisition_path: /etc/crowdsec/config/acquis.yaml
+
+# Hub configuration
+hub:
+  hub_dir: /var/lib/crowdsec/data/hub
+  index_path: /var/lib/crowdsec/data/hub/.index.json
+  git:
+    enabled: true
+    path: /var/lib/crowdsec/data/hub/.git
+    update_git: true
+    integrity_check: true
+
+# Backup directory
+backups:
+  backup_dir: /var/lib/crowdsec/data/backups
+
+# Data directory
+data_dir: /var/lib/crowdsec/data
+
+# Timezone
+timezone: UTC
+
+# Plugin configuration
+plugin:
+  dir: /etc/crowdsec/plugins
+
+# Cscli configuration
+cscli:
+  configuration:
+    hub_path: /var/lib/crowdsec/data/hub
+    plugin_dir: /etc/crowdsec/plugins
+    simulation_path: /etc/crowdsec/config/simulation.yaml
+
+# Logging
+log_level: info
+log_media: stdout
+log_dir: /var/log/crowdsec
+log_max_size: 10
+log_max_age: 30
+log_max_files: 3
+compress_logs: true
+
+# Configurations to load
+configs:
+  - /etc/crowdsec/config/acquis.yaml
+  - /etc/crowdsec/config/profiles.yaml
+
+# Prometheus configuration
+prometheus:
+  enabled: true
+  listen_addr: 127.0.0.1
+  listen_port: 6061
+
+# CSCLI configuration
+cscli:
+  configuration:
+    crowdsec_dir: /etc/crowdsec/config
+    data_dir: /var/lib/crowdsec/data
+    hub_dir: /var/lib/crowdsec/data/hub
+    plugin_dir: /etc/crowdsec/plugins
+    simulation_path: /etc/crowdsec/config/simulation.yaml

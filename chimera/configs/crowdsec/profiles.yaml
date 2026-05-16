@@ -1,0 +1,113 @@
+# CrowdSec Profiles Configuration
+# Defines detection thresholds and ban behaviors
+#
+# Documentation: https://docs.crowdsec.net/docs/configuration/profiles
+
+profiles:
+  # ============================================================
+  # Default Profile - General HTTP abuse
+  # ============================================================
+  - name: default_ip_reputation
+    filters:
+      - 'evt.Meta.service != "nginx"'
+    decisions:
+      - type: ban
+        duration: 4h
+    on_success: break
+
+  # ============================================================
+  # HTTP Scanner Detection
+  # ============================================================
+  - name: http_scanner
+    filters:
+      - 'evt.Meta.service == "nginx"'
+      - 'evt.Meta.value >= 50'
+    decisions:
+      - type: ban
+        duration: 8h
+    on_success: break
+
+  # ============================================================
+  # HTTP Crawler Detection (moderate scraping)
+  # ============================================================
+  - name: http_crawler
+    filters:
+      - 'evt.Meta.service == "nginx"'
+      - 'evt.Meta.value >= 30'
+      - 'evt.Meta.value < 50'
+    decisions:
+      - type: captcha
+        duration: 2h
+    on_success: break
+
+  # ============================================================
+  # HTTP Probing (single requests to sensitive paths)
+  # ============================================================
+  - name: http_probing
+    filters:
+      - 'evt.Meta.service == "nginx"'
+      - 'scenario == "crowdsecurity/http-probing"'
+      - 'evt.Meta.value >= 5'
+    decisions:
+      - type: ban
+        duration: 2h
+    on_success: break
+
+  # ============================================================
+  # HTTP Brute Force Detection
+  # ============================================================
+  - name: http_brute_force
+    filters:
+      - 'evt.Meta.service == "nginx"'
+      - 'scenario == "crowdsecurity/http-bf-standard"'
+    decisions:
+      - type: ban
+        duration: 24h
+    on_success: break
+
+  # ============================================================
+  # SQL Injection Attempt Detection
+  # ============================================================
+  - name: http_sqli
+    filters:
+      - 'evt.Meta.service == "nginx"'
+      - 'scenario contains "http-csrf" or scenario contains "http-sql-injection"'
+    decisions:
+      - type: ban
+        duration: 12h
+    on_success: break
+
+  # ============================================================
+  # Slowloris / DoS Detection
+  # ============================================================
+  - name: http_dos
+    filters:
+      - 'evt.Meta.service == "nginx"'
+      - 'scenario contains "http-slowloris" or scenario contains "http-dos"'
+    decisions:
+      - type: ban
+        duration: 4h
+    on_success: break
+
+  # ============================================================
+  # Aggressive Bot Detection
+  # ============================================================
+  - name: aggressive_bot
+    filters:
+      - 'evt.Meta.service == "nginx"'
+      - 'evt.Meta.value >= 100'
+    decisions:
+      - type: ban
+        duration: 24h
+    on_success: break
+
+  # ============================================================
+  # Catch-all for any remaining threats
+  # ============================================================
+  - name: catch_all
+    filters:
+      - 'evt.Category == "http"'
+    decisions:
+      - type: ban
+        duration: 1h
+    on_success: break
