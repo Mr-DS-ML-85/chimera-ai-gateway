@@ -160,13 +160,22 @@ Provider-prefixed variants also work: `groq/auto`, `openrouter/reasoning`, `olla
 
 ---
 
-## 🤖 Claude Code / Anthropic Support
+## 🤖 Claude Code / Anthropic SDK Support
 
-Chimera natively supports the `/v1/messages` endpoint for Claude Code and Anthropic SDK clients.
+Chimera natively supports the Anthropic API format via `/v1/messages` and `/v1/responses` — works directly with Claude Code, Claude SDK (Node/Python), and any Anthropic-compatible client.
+
+### Quick Start — Claude SDK
 
 ```bash
-# Claude SDK
-const client = new Anthropic({ baseURL: "http://localhost:8000" });
+# Set environment
+export ANTHROPIC_BASE_URL="http://localhost:8000"
+export ANTHROPIC_AUTH_TOKEN="your_chimera_api_key"
+```
+
+```javascript
+// Node.js — Claude SDK
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic({ baseURL: process.env.ANTHROPIC_BASE_URL });
 const msg = await client.messages.create({
   model: "auto:reasoning",
   max_tokens: 1024,
@@ -175,7 +184,7 @@ const msg = await client.messages.create({
 ```
 
 ```python
-# Python Anthropic SDK
+# Python — Anthropic SDK
 from anthropic import Anthropic
 client = Anthropic(base_url="http://localhost:8000")
 msg = client.messages.create(
@@ -184,6 +193,41 @@ msg = client.messages.create(
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
+
+### Supported Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /v1/messages` | Messages API — non-streaming & streaming (SSE) |
+| `POST /v1/messages/count_tokens` | Token counting for pre-flight checks |
+| `POST /v1/responses` | Responses API format wrapper |
+
+### Virtual Models with Anthropic
+
+All virtual model aliases work with `/v1/messages`:
+
+- `auto` / `auto:free` — Best non-reasoning model (fast by default)
+- `auto:reasoning` / `auto:free:reasoning` — Best reasoning model
+- `fast` / `quality` / `balanced` — Latency vs quality trade-offs
+
+Model alias shortcuts: `sonnet` → `claude-sonnet-4-7`, `opus` → `claude-opus-4-5`, `haiku` → `claude-haiku-4-7`
+
+### Direct Anthropic API
+
+Set `ANTHROPIC_API_KEY` in `.env` to route directly to Anthropic for model names starting with `anthropic/`:
+
+```dotenv
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+ANTHROPIC_TIMEOUT=120
+```
+
+### Anthropic Headers
+
+These headers are forwarded through to the upstream provider:
+- `anthropic-beta` — enables beta features
+- `anthropic-version` — API version (e.g. `2023-06-01`)
+- `anthropic-dangerous-direct-browser-access` — for direct browser clients
 
 ---
 
@@ -211,7 +255,8 @@ msg = client.messages.create(
 | 18 | **Perplexity** | ❌ Paid API | 20 | System · Stream · Search | `PERPLEXITY_API_KEY` |
 | 19 | **Fireworks AI** | $1 credit | 6,000 | Vision · Tools · System · Stream | `FIREWORKS_API_KEY` |
 | 20 | **DeepInfra** | ✅ Trial credits | 12,000 | Tools · System · Stream | `DEEPINFRA_API_KEY` |
-| 21 | **Custom (BYOK)** | ✅ User-defined | ∞ | Vision · Tools · System · Stream | `CUSTOM_OPENAI_*` |
+| 21 | **Anthropic (direct)** | ⚠️ Paid API | — | Vision · Tools · Thinking · Stream | `ANTHROPIC_API_KEY` |
+| 22 | **Custom (BYOK)** | ✅ User-defined | ∞ | Vision · Tools · System · Stream | `CUSTOM_OPENAI_*` |
 
 See [docs/PROVIDERS.md](docs/PROVIDERS.md) for full provider details and model lists.
 
@@ -252,6 +297,11 @@ OPENROUTER_API_KEY=
 POLLINATIONS_API_KEY=    # optional — works without it
 OLLAMA_BASE_URL=http://localhost:11434
 CUSTOM_OPENAI_BASE_URL=  # your vLLM / ollama server
+
+# Anthropic direct routing (optional — for claude-sonnet-4, claude-opus-4, etc.)
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+ANTHROPIC_TIMEOUT=120
 
 # Security
 ENABLE_WAF=1

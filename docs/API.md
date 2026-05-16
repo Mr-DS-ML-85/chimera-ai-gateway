@@ -102,15 +102,109 @@ Anthropic-native messages endpoint for Claude Code and Claude SDK compatibility.
   ],
   "max_tokens": 1024,
   "temperature": null,
+  "stream": false,
+  "system": null,
+  "thinking": null,
+  "top_k": null,
+  "top_p": null,
+  "stop_sequences": null
+}
+```
+
+**Virtual model aliases (same as `/v1/chat/completions`):**
+- `auto`, `auto:free`, `auto:reasoning`, `auto:free:reasoning`
+- `fast`, `fast:free`, `quality`, `balanced`
+- `reasoning`, `reasoning:free`, `non-reasoning`, `non-reasoning:free`
+
+**Model alias normalization:**
+- `sonnet` → `anthropic/claude-sonnet-4-7`
+- `opus` → `anthropic/claude-opus-4-5`
+- `haiku` → `anthropic/claude-haiku-4-7`
+
+**Anthropic headers forwarded:**
+- `anthropic-beta` — enables beta features
+- `anthropic-version` — specifies API version (e.g. `2023-06-01`)
+- `anthropic-dangerous-direct-browser-access` — for direct browser clients
+
+**Direct Anthropic routing:** When `ANTHROPIC_API_KEY` is set in `.env` and the model starts with `anthropic/` (or normalizes to an Anthropic model), the request is routed directly to the Anthropic API — bypassing OpenAI-compatible providers.
+
+**Response (non-streaming):**
+
+```json
+{
+  "id": "msg_abc123",
+  "type": "message",
+  "role": "assistant",
+  "model": "auto:reasoning",
+  "content": [{ "type": "text", "text": "Hello! How can I help?" }],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 12,
+    "output_tokens": 10,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  }
+}
+```
+
+**Response (streaming):** `text/event-stream` with SSE chunks in Anthropic format:
+
+```
+data: {"type":"message_start","message":{"id":"msg_abc","type":"message","role":"assistant","model":"auto","usage":{"input_tokens":0,"output_tokens":0}}}
+
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}
+
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"!"}}
+
+data: {"type":"content_block_stop","index":0}
+
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":10}}
+
+data: {"type":"message_stop"}
+```
+
+---
+
+## `POST /v1/messages/count_tokens`
+
+Claude Code pre-flight token counting. Returns estimated token count for a request body without making an LLM call.
+
+**Request body:** Same as `/v1/messages`.
+
+**Response:**
+
+```json
+{
+  "tokens": 42,
+  "count_tokens_version": "1"
+}
+```
+
+**Note:** Estimation uses ~1 token per 4 characters (conservative for Claude tokenization). For exact counts, use the direct Anthropic API.
+
+---
+
+## `POST /v1/responses`
+
+[Responses API](https://docs.anthropic.com/en/api/responses) format wrapper. Translates to OpenAI format internally, routes via the same engine.
+
+**Request body:**
+
+```json
+{
+  "model": "auto",
+  "input": [
+    { "role": "user", "content": "Hello!" }
+  ],
+  "max_tokens": 1024,
   "stream": false
 }
 ```
 
-**Behaviour:**
-- Translates Anthropic format to OpenAI internally, routes via the same engine
-- Multi-block content (`type: "text"`) is flattened to plain text
-- Supports the same virtual model aliases as `/v1/chat/completions`
-- Returns OpenAI-format response (normalised from provider)
+**Response:** OpenAI-format chat completion (normalised from provider).
 
 ---
 
