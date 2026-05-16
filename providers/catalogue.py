@@ -20,6 +20,8 @@ import httpx
 
 from chimera.core.config import (
     A4F_API_KEY,
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_BASE_URL,
     CEREBRAS_API_KEY,
     CF_ACCOUNT_ID,
     CF_API_TOKEN,
@@ -731,6 +733,42 @@ PROVIDER_CATALOGUE: List[Dict[str, Any]] = [
         "reasoning_models": [
             "MiniMax-Text-01",
             "MiniMax-Text-01-Turbo",
+        ],
+    },
+
+    # 23. Anthropic (direct — only enabled when ANTHROPIC_API_KEY is set)
+    {
+        "name":       "anthropic",
+        "base_url":   ANTHROPIC_BASE_URL or "https://api.anthropic.com",
+        "api_key":    ANTHROPIC_API_KEY,
+        "keyless":    False,
+        "chat_path":  "/v1/messages",
+        "models_path": "/v1/models",
+        "extra_headers": {
+            "anthropic-version": "2023-06-01",
+        },
+        "rpm_limit":  50,
+        "rpd_limit":  0,
+        "tpd_limit":  0,
+        "timeout":    _env_float("ANTHROPIC_TIMEOUT", 120),
+        "priority":   0,  # highest priority when configured
+        "enabled":    bool(ANTHROPIC_API_KEY),  # only enabled if key is set
+        "capabilities": [
+            ProviderCaps.VISION,
+            ProviderCaps.TOOLS,
+            ProviderCaps.SYSTEM,
+            ProviderCaps.STREAMING,
+        ],
+        "non_reasoning_models": [
+            "claude-3-5-haiku-20241022",
+            "claude-3-5-sonnet-20241022",
+            "claude-3-7-sonnet-20250514",
+            "claude-sonnet-4-7-20250514",
+            "claude-opus-4-7-20250514",
+        ],
+        "reasoning_models": [
+            "claude-sonnet-4-7-20250514",
+            "claude-opus-4-7-20250514",
         ],
     },
 ]
