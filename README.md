@@ -250,11 +250,11 @@ Claude Desktop (and Cowork) validates model names in Gateway mode — only names
 
 | Client model name | Rewritten to |
 |---|---|
-| `minimax-m2.5-free` | `opencode-zen/minimax-m2.5-free` |
-| `gemini-3-flash` | `opencode-zen/gemini-3-flash` |
-| `glm-5` | `opencode-zen/glm-5` |
-| `qwq-32b` | `opencode-zen/qwq-32b` |
-| `gpt-oss-20b` | `opencode-zen/gpt-oss-20b` |
+| `claude-opus-4.7` | `opencode-zen/minimax-m2.5-free` |
+| `claude-4.5-Haiku` | `google/gemini-3-flash` |
+| `claude-opus-4.6` | `auto-reasoning` |
+
+You can add your own aliases via .env
 
 This applies to both `/v1/chat/completions` and `/v1/messages` endpoints. No client config change needed — just use the model name as-is.
 
