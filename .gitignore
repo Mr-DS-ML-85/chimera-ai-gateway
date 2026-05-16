@@ -1,1 +1,5 @@
 chimera/virtual_keys.json
+.env
+check_*.py
+debug_*.py
+virtual_keys.json
