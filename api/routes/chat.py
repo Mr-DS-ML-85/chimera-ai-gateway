@@ -388,12 +388,25 @@ async def anthropic_messages(request: Request):
     # Determine target model
     requested_model = str(body.get("model", "")).strip()
     model_aliases = {
+        # Anthropic model shortcuts
         "sonnet": "anthropic/claude-sonnet-4-7-20250514",
         "sonnet-4-7": "anthropic/claude-sonnet-4-7-20250514",
         "haiku": "anthropic/claude-3.5-haiku-20241022",
         "opus": "anthropic/claude-3-7-sonnet-20250514",
         "3.5-haiku": "anthropic/claude-3.5-haiku-20241022",
         "3.5-sonnet": "anthropic/claude-3.5-sonnet-20241022",
+        # Non-Anthropic model aliases — Claude Desktop validates model names
+        # and only accepts those containing "claude", "sonnet", "opus", "haiku",
+        # or "anthropic". We rewrite free/third-party model names so the gateway
+        # prefix makes the name pass validation while routing correctly.
+        # Routes via opencode-zen backend when ANTHROPIC_API_KEY is not set.
+        "minimax-m2.5-free": "opencode-zen/minimax-m2.5-free",
+        "minimax-m2.5": "opencode-zen/minimax-m2.5",
+        "minimax-m2": "opencode-zen/minimax-m2",
+        "gemini-3-flash": "opencode-zen/gemini-3-flash",
+        "glm-5": "opencode-zen/glm-5",
+        "gpt-oss-20b": "opencode-zen/gpt-oss-20b",
+        "qwq-32b": "opencode-zen/qwq-32b",
     }
     raw_alias = requested_model.lower().strip()
     if raw_alias in model_aliases:
@@ -691,12 +704,23 @@ async def responses_endpoint(request: Request):
     # Determine target model
     requested_model = str(body.get("model", "")).strip()
     model_aliases = {
+        # Anthropic model shortcuts
         "sonnet": "anthropic/claude-sonnet-4-7-20250514",
         "sonnet-4-7": "anthropic/claude-sonnet-4-7-20250514",
         "haiku": "anthropic/claude-3.5-haiku-20241022",
         "opus": "anthropic/claude-3-7-sonnet-20250514",
         "3.5-haiku": "anthropic/claude-3.5-haiku-20241022",
         "3.5-sonnet": "anthropic/claude-3.5-sonnet-20241022",
+        # Non-Anthropic model aliases — Claude Desktop validates model names
+        # and only accepts those containing "claude", "sonnet", "opus", "haiku",
+        # or "anthropic". Rewrite to opencode-zen prefix for correct routing.
+        "minimax-m2.5-free": "opencode-zen/minimax-m2.5-free",
+        "minimax-m2.5": "opencode-zen/minimax-m2.5",
+        "minimax-m2": "opencode-zen/minimax-m2",
+        "gemini-3-flash": "opencode-zen/gemini-3-flash",
+        "glm-5": "opencode-zen/glm-5",
+        "gpt-oss-20b": "opencode-zen/gpt-oss-20b",
+        "qwq-32b": "opencode-zen/qwq-32b",
     }
     raw_alias = requested_model.lower().strip()
     if raw_alias in model_aliases:

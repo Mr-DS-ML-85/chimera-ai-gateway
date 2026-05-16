@@ -42,6 +42,7 @@ from chimera.core.config import (
     MODEL_REFRESH_INTERVAL_SECS,
     NVIDIA_NIM_API_KEY,
     OLLAMA_BASE_URL,
+    OPENCODE_ZEN_API_KEY,
     OPENROUTER_API_KEY,
     PERPLEXITY_API_KEY,
     POLLINATIONS_API_KEY,
@@ -769,6 +770,41 @@ PROVIDER_CATALOGUE: List[Dict[str, Any]] = [
         "reasoning_models": [
             "claude-sonnet-4-7-20250514",
             "claude-opus-4-7-20250514",
+        ],
+    },
+
+    # 24. OpenCode Zen — free model gateway (alternative to Anthropic).
+    # Supports minimax-m2.5-free, gemini-3-flash, glm-5, etc.
+    # Also serves as the model-name rewriting target for Claude Desktop
+    # compatibility: client validates model names, we rewrite to this prefix.
+    {
+        "name":       "opencode-zen",
+        "base_url":   "https://opencode.ai/zen/v1",
+        "api_key":    OPENCODE_ZEN_API_KEY,
+        "keyless":    True,  # works without a key (free tier) — key enables higher limits
+        "chat_path":  "/chat/completions",
+        "models_path": "",
+        "extra_headers": {},
+        "rpm_limit":  120,
+        "rpd_limit":  0,
+        "tpd_limit":  0,
+        "timeout":    _env_float("OPENCODE_ZEN_TIMEOUT", 120),
+        "priority":   5,
+        "enabled":    True,
+        "capabilities": [
+            ProviderCaps.TOOLS,
+            ProviderCaps.SYSTEM,
+            ProviderCaps.STREAMING,
+        ],
+        "non_reasoning_models": [
+            "minimax-m2.5-free",
+            "gemini-3-flash",
+            "glm-5",
+            "gpt-oss-20b",
+        ],
+        "reasoning_models": [
+            "minimax-m2.5-free",
+            "qwq-32b",
         ],
     },
 ]
