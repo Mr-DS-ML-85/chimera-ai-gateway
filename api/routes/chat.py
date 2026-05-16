@@ -216,6 +216,20 @@ async def anthropic_messages(request: Request):
     if encrypt_requested and stream:
         raise HTTPException(400, {"error": "e2ee_stream_unsupported"})
 
+    # Normalize short model names to full provider/model IDs (Claude Code compatibility)
+    _model_aliases = {
+        "sonnet": "anthropic/claude-sonnet-4-7-20250514",
+        "sonnet-4-7": "anthropic/claude-sonnet-4-7-20250514",
+        "haiku": "anthropic/claude-3.5-haiku-20241022",
+        "opus": "anthropic/claude-3-7-sonnet-20250514",
+        "3.5-haiku": "anthropic/claude-3.5-haiku-20241022",
+        "3.5-sonnet": "anthropic/claude-3.5-sonnet-20241022",
+    }
+    raw_model = str(openai_body.get("model", "")).strip().lower()
+    if raw_model in _model_aliases:
+        openai_body["model"] = _model_aliases[raw_model]
+        requested_model = openai_body["model"]
+
     # Virtual routing
     requested_model = str(openai_body.get("model", "")).strip()
     route: Optional[RouteSpec] = resolve_virtual_model(
@@ -250,7 +264,16 @@ async def anthropic_messages(request: Request):
             continue
 
         try:
-            result = await call_provider(provider, model, openai_body, stream, rid)
+            # Extract and forward Anthropic headers for Claude Code compatibility
+            anthropic_beta = request.headers.get("anthropic-beta", "")
+            anthropic_version = request.headers.get("anthropic-version", "2023-06-01")
+            extra_h: Dict[str, str] = {}
+            if anthropic_beta:
+                extra_h["anthropic-beta"] = anthropic_beta
+            if anthropic_version:
+                extra_h["anthropic-version"] = anthropic_version
+
+            result = await call_provider(provider, model, openai_body, stream, rid, extra_h if extra_h else None)
             if len(result) == 3:
                 resp_val, status, err = result
                 if resp_val is None:
@@ -270,11 +293,22 @@ async def anthropic_messages(request: Request):
             continue
 
         if status >= 400:
-            preview = str(raw_data)[:200] if isinstance(raw_data, str) else ""
+            preview = (await raw_data.aread())[:300].decode(errors="replace")
             raise HTTPException(502, {
                 "error":   "upstream_error",
                 "provider": provider_name,
                 "status":  status,
+                "preview": preview,
+            })
+
+        # Parse JSON response
+        try:
+            raw_data = raw_data.json()
+        except Exception:
+            preview = (await raw_data.aread())[:300].decode(errors="replace")
+            raise HTTPException(502, {
+                "error": "invalid_upstream_json",
+                "provider": provider_name,
                 "preview": preview,
             })
 
@@ -352,6 +386,42 @@ async def anthropic_messages(request: Request):
         return JSONResponse(content=resp, headers=resp_headers)
 
     raise HTTPException(503, f"All providers failed. Last error: {last_error}")
+
+
+@router.post("/v1/messages/count_tokens")
+async def count_tokens(request: Request):
+    """Token counting endpoint for Claude Code pre-flight checks."""
+    raw = await request.body()
+    try:
+        body = json.loads(raw or b"{}")
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Invalid JSON")
+
+    # Simple estimation: ~1 token per 4 chars (conservative for Claude tokens)
+    messages = body.get("messages", [])
+    system = body.get("system", "")
+
+    total = 0
+    if system:
+        total += len(system) // 4
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            total += len(content) // 4
+        elif isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    total += len(block.get("text", "")) // 4
+
+    # Add overhead for model name and formatting
+    model_name = body.get("model", "")
+    if model_name:
+        total += 20  # overhead for system framing
+
+    return JSONResponse(content={
+        "tokens": total,
+        "count_tokens_version": "1"
+    })
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────

@@ -352,6 +352,7 @@ async def call_provider(
     body: Dict[str, Any],
     stream: bool,
     request_id: str,
+    extra_headers: Optional[Dict[str, str]] = None,
 ) -> Tuple[Optional[Any], int, Optional[str]]:
     name = provider["name"]
 
@@ -435,6 +436,7 @@ async def call_provider(
         "Content-Type": "application/json",
         "X-Request-ID": request_id,
         **provider.get("extra_headers", {}),
+        **(extra_headers or {}),
     }
     if provider.get("api_key"):
         headers["Authorization"] = f"Bearer {provider['api_key']}"
