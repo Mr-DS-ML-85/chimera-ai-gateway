@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 <div align="center">
 
@@ -189,11 +190,42 @@ from anthropic import Anthropic
 client = Anthropic(base_url="http://localhost:8000")
 msg = client.messages.create(
     model="auto:reasoning",
+=======
+# Chimera AI Gateway
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
+Chimera is an **open-source AI model gateway** that routes API requests to multiple providers (OpenCode, OpenRouter, Claude Desktop, etc.) with model aliasing, WAF bypass, and fallback logic.
+
+---
+## 🔧 Quick Start
+
+```bash
+git clone https://github.com/Mr-DS-ML-85/chimera-ai-gateway.git
+cd chimera-ai-gateway/chimera
+cp .env.example .env  # Edit with your API keys
+python3 start.py
+```
+
+---
+## 📖 Usage
+
+### Python — Anthropic SDK
+
+```python
+from anthropic import Anthropic
+client = Anthropic(
+    base_url="http://127.0.0.1:8000",  # Use 127.0.0.1 for Claude Desktop
+    api_key="your_chimera_api_key"
+)
+msg = client.messages.create(
+    model="sonnet",  # or "haiku", "opus", "claude-4.6-sonnet"
+>>>>>>> d85142b (Add README)
     max_tokens=1024,
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
 
+<<<<<<< HEAD
 ### Supported Endpoints
 
 | Endpoint | Description |
@@ -407,3 +439,27 @@ MIT — see [LICENSE](LICENSE).
 - ["Your Agent Is Mine"](https://arxiv.org/abs/2604.08407) (arXiv:2604.08407) — security threat model
 - [FastAPI](https://fastapi.tiangolo.com/) — web framework
 - All 21 integrated AI providers
+=======
+### WAF Bypass
+Whitelist LDAP/XML payloads in `.env`:
+```ini
+WAF_BYPASS_PATTERNS=ldap|xml|/v1/models
+```
+
+---
+## 🛠 Configuration
+Edit `.env`:
+```ini
+MODEL_ALIASES_JSON='{"sonnet": "gemini-3.1-flash-lite", "opus": "opencode/minimax-m2.5-free"}'
+```
+
+---
+## 📜 License
+MIT License — © 2026 [Mr-DS-ML-85](https://github.com/Mr-DS-ML-85)
+
+---
+## 🔗 Related
+- [OpenCode CLI](https://github.com/opencodeapi/opencode-cli)
+- [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-python)
+- [Gemini API](https://ai.google.dev/)
+>>>>>>> d85142b (Add README)

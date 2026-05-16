@@ -55,4 +55,4 @@ virtual_keys.json
 # TLS certificates (generate your own with openssl)
 cert.pem
 key.pem
-*.pem
+*.pemconfigs/crowdsec/.env
