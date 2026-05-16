@@ -164,6 +164,12 @@ def allows_model(rec: Dict[str, Any], model: str) -> bool:
     return not allowed or "*" in allowed or model in allowed
 
 
+def allows_all(rec: Dict[str, Any]) -> bool:
+    """Return True if the key has no model restrictions (wildcard or empty)."""
+    allowed = rec.get("allowed_models", [])
+    return not allowed or "*" in allowed
+
+
 # ── Compat aliases ────────────────────────────────────────────────────────────
 def load() -> None:
     pass   # lazy-loaded on first request

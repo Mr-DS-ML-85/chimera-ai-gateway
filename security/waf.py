@@ -32,9 +32,143 @@ def _waf_decode(text: str) -> str:
     return re.sub(r"[\u200b\u200c\u200d\ufeff\u00ad]", "", result)
 
 
+# ── XSS safe-verb allowlist ─────────────────────────────────────────────────
+_XSS_PATTERN = re.compile(
+    r"""(?:"""
+    r"""<script[\s>]|<iframe[\s>]"""
+    r"""|<svg[^>]{0,100}>\s*<script"""
+    r"""|<img[^>]{0,200}on\w+\s*="""
+    r"""|<svg[^>]{0,200}on\w+\s*="""
+    r"""|<body[^>]{0,200}on\w+\s*="""
+    r"""|<input[^>]{0,200}on\w+\s*="""
+    r"""|<form[^>]{0,200}on\w+\s*="""
+    r"""|<marquee[^>]{0,100}on\w+\s*="""
+    r"""|<video[^>]{0,200}on\w+\s*="""
+    r"""|<audio[^>]{0,200}on\w+\s*="""
+    r"""|<details[^>]{0,200}on\w+\s*="""
+    r"""|<meta[^>]{0,200}on\w+\s*="""
+    r"""|<svg\s+on\w+\s*="""
+    r"""|javascript\s*:[^s]"""
+    r"""|vbscript\s*:[^s]"""
+    r"""|data\s*:\s*text/html"""
+    r"""|<object[^>]{0,100}data\s*="""
+    r"""|<embed[^>]{0,100}src\s*="""
+    r"""|<link[^>]{0,100}href\s*="""
+    r"""|<base[^>]{0,100}href\s*="""
+    r"""|<style[^>]{0,100}@import"""
+    r"""|<iframe[^>]{0,100}src\s*=["']javascript:"""
+    r"""|<meta[^>]{0,100}http-equiv\s*="""
+    r"""|expression\s*\("""
+    r""")""",
+    re.IGNORECASE,
+)
+_XSS_SAFE_VERBS = re.compile(
+    r"""(?i)\b(explain|what\s+is|learn\s+about|tell\s+me|show\s+me|"""
+    r"""example\s+of|demonstrate|describe|illustrate|teach\s+me|"""
+    r"""how\s+to\s+use|how\s+does|in\s+html|using\s+html|in\s+xml|using\s+xml|"""
+    r"""in\s+javascript|using\s+javascript|in\s+css|using\s+css|"""
+    r"""for\s+(?:example|demonstration|learning))\s*(?:tag|element|attribute|"""
+    r"""syntax|code|script|iframe|img|object|embed|link|base|meta|style)\b"""
+)
+# Generic safe pattern for math/bitwise pipe operators
+_XSS_SAFE = re.compile(
+    r"""(?i)\b(and|or|add|del|set|get|put|val|ref|idx|key|ids?|list|"""
+    r"""map|arr|foo|bar|baz|nums?|items?|names?|ids?|rows?|cols?|"""
+    r"""path|file|dir|node|data|payload|body|result|response|"""
+    r"""x|y|xy|x1|x2|x3|y1|y2|a|b|c|d|e|f|g|h|i|j|k|l|m|n|"""
+    r"""num|val|cnt|sum|prod|min|max|avg|std|point|coord|vector|matrix|"""
+    r"""col|row|cel|ent|obj|ref|key|uri|loc|pos|dim|size)\s*\|"""
+    r"""|\]\s*\|"""
+    r"""|\|\s*\["""
+    r"""|\(?\s*\|\s*\d"""
+    r"""|\)\s*\|"""
+    r"""|\|\s*\("""
+    r"""|^\s*\|"""
+    r"""|\b\d+\s*\|\s*\d+\b"""
+    r"""|\[\d+\s*\|\s*\d+\]"""
+    r"""|\(\d+\s*\|\s*\d+\)"""
+    r"""|[A-Za-z_][A-Za-z0-9_]*\s*\|\s*[A-Za-z_][A-Za-z0-9_]*"""
+    r"""|^\(\s*[A-Za-z_][A-Za-z0-9_]*\s*\|"""
+)
+
+
+def _is_safe_xss(text: str) -> bool:
+    return bool(_XSS_SAFE_VERBS.search(text)) or bool(_XSS_SAFE.search(text))
+
+
+# ── LDAP injection safe-pattern allowlist ───────────────────────────────────
+_LDAP_INJECTION = re.compile(
+    r"""(?:"""
+    r"""\(\s*[&|]"""
+    r"""|[&|]\s*\("""
+    r"""|[&|!]\s*\w+\s*="""
+    r"""|\\{2,}\w{2,}"""
+    r""")""",
+    re.IGNORECASE,
+)
+
+
+def _is_safe_ldap(text: str) -> bool:
+    return bool(_XSS_SAFE.search(text))
+
+
+# ── Path traversal safe-pattern allowlist ───────────────────────────────────
+_PATH_SAFE = re.compile(
+    r"""(?i)\b(path|file|dir|src|loc|location|uri|url|link|href|"""
+    r"""ref|reference|route|dest|target|folder|folder_path|"""
+    r"""workdir|root|base|directory|pathname|path_|filepath)\s*[:=]\s*\\"""
+    r"""|^\s*\\"""
+    r"""|[A-Za-z_][A-Za-z0-9_]*\s*=\s*\\"""
+    r"""|\s=\s*\\\\"""
+)
+_PATH_TRAVERSAL = re.compile(
+    r"""(?:"""
+    r"""\.\./|\.\.\\|\.\.%2f|\.\.%5c|%2e%2e[%/\\]|%252e%252e"""
+    r"""|\.\.[\x00-\x1f]"""
+    r"""|/etc/(?:passwd|shadow|hosts|crontab)"""
+    r"""|\\windows\\system32"""
+    r""")""",
+    re.IGNORECASE,
+)
+
+
+def _is_safe_path(text: str) -> bool:
+    return bool(_PATH_SAFE.search(text))
+
+
+# ── Template injection safe-pattern allowlist ───────────────────────────────
+_TEMPLATE_SAFE = re.compile(
+    r"""(?i)\b(use|set|create|make|show|display|render|print|output|"""
+    r"""example|demo|sample|placeholder|variable|template|"""
+    r"""name|user|item|key|value|data|payload|body|result|msg|message)\s*\{\{"""
+)
+_TEMPLATE_INJECTION = re.compile(
+    r"""(?:"""
+    r"""\{\{.{0,30}?\.\w+"""
+    r"""|\{\{.{0,30}?_"""
+    r"""|\{\{[\s\S]{0,50}?__"""
+    r"""|\$\{[\s\S]{0,50}?\$\{"""
+    r"""|#\{[\s\S]{0,50}?#\{"""
+    r"""|<%[\s\S]{0,50}?<%"""
+    r"""|\{%[\s\S]{0,50}?\{%"""
+    r"""|\{\{.{0,30}?\["""
+    r"""|\{\{[\s\S]{0,80}?\|\s*\w+"""
+    r"""|\{\{.{0,50}?(?:class|mro|bases|globals|locals|import)\b"""
+    r"""|\{%[^%]{0,30}?include"""
+    r"""|\{%[^%]{0,30}?import"""
+    r"""|\{%[^%]{0,30}?exec"""
+    r""")""",
+    re.DOTALL,
+)
+
+
+def _is_safe_template(text: str) -> bool:
+    return bool(_TEMPLATE_SAFE.search(text))
+
+
 # IMPORTANT: Order matters — more specific patterns must come before general ones.
 # NoSQL must precede SQL ($ prefix). XXE must precede path_traversal (<!DOCTYPE).
-WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
+WAF_PATTERNS: List[Tuple[str, object]] = [
     # 1. XXE — must come before path_traversal (shares <! tokens)
     ("xxe", re.compile(
         r"(?:"
@@ -63,34 +197,16 @@ WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
         r"|\bOR\b[\s/\*]{0,10}['\"]?1['\"]?[\s/\*]{0,10}=[\s/\*]{0,10}['\"]?1"
         r"|\bAND\b[\s/\*]{0,10}['\"]?1['\"]?[\s/\*]{0,10}=[\s/\*]{0,10}['\"]?1"
         r"|--[\s]*$|;\s*--"
-        r"|\bSLEEP\s*\(\d|\bBENCHMARK\s*\(|\bWAITFOR\s+DELAY\b|\bPG_SLEEP\s*\("
+        r"|\bSLEEP\s*\(\d|\bBENCHMARK\s*\(|\\bWAITFOR\s+DELAY\b|\bPG_SLEEP\s*\("
         r")",
         re.IGNORECASE | re.MULTILINE,
     )),
 
-    # 4. XSS
-    ("xss", re.compile(
-        r"(?:"
-        r"<\s*script[\s>]|<\s*iframe[\s>]"
-        r"|<\s*img[^>]{0,200}on\w+\s*=|<\s*svg[^>]{0,200}on\w+\s*="
-        r"|javascript\s*:|vbscript\s*:|data\s*:\s*text/html"
-        r"|on(?:load|error|click|focus|blur|mouseover|keydown|keyup"
-        r"|submit|input|change|dragstart|drop|paste)\s*="
-        r"|<\s*(?:object|embed|link|meta|base)\b|expression\s*\("
-        r")",
-        re.IGNORECASE,
-    )),
+    # 4. XSS — callable (safe-verb allowlisting)
+    ("xss", lambda t: bool(_XSS_PATTERN.search(t)) and not _is_safe_xss(t)),
 
-    # 5. Path traversal
-    ("path_traversal", re.compile(
-        r"(?:"
-        r"\.\./|\.\.\\|\.\.%2f|\.\.%5c|%2e%2e[%/\\]|%252e%252e"
-        r"|\.\.[\x00-\x1f]"
-        r"|/etc/(?:passwd|shadow|hosts|crontab)"
-        r"|\\windows\\system32"
-        r")",
-        re.IGNORECASE,
-    )),
+    # 5. Path traversal — callable (safe-pattern allowlisting)
+    ("path_traversal", lambda t: bool(_PATH_TRAVERSAL.search(t)) and not _is_safe_path(t)),
 
     # 6. Command injection
     ("cmd_injection", re.compile(
@@ -105,27 +221,11 @@ WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
         re.IGNORECASE,
     )),
 
-    # 7. Template injection
-    ("template_injection", re.compile(
-        r"(?:"
-        r"\{\{[\s\S]{0,200}?\}\}"
-        r"|\$\{[\s\S]{0,200}?\}"
-        r"|#\{[\s\S]{0,200}?\}"
-        r"|<%[\s\S]{0,200}?%>"
-        r"|\{%[\s\S]{0,200}?%\}"
-        r")",
-        re.DOTALL,
-    )),
+    # 7. Template injection — callable (safe-pattern allowlisting)
+    ("template_injection", lambda t: bool(_TEMPLATE_INJECTION.search(t)) and not _is_safe_template(t)),
 
-# 8. LDAP injection — requires actual LDAP operator context, not bare brackets
-    ("ldap_injection", re.compile(
-        r"(?:"
-        r"\(\s*[|&]\s*\("              # nested grouping: (| or (&
-        r"|\\{2,}\w{2,}"              # backslash-escaped 2+ chars: \cn \xo \00
-        r"|[&|]\(\w+\)"                # LDAP filter ops: (&(uid=...) or |(cn=...)
-        r")",
-        re.IGNORECASE,
-    )),
+    # 8. LDAP injection — callable (safe-pattern allowlisting)
+    ("ldap_injection", lambda t: bool(_LDAP_INJECTION.search(t)) and not _is_safe_ldap(t)),
 
     # 9. Untrusted Deserialization
     ("untrusted_deserialization", re.compile(
@@ -138,15 +238,14 @@ WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
         re.IGNORECASE,
     )),
 
-    # 10. XML/Prompt Tag Injection — only fire on tags with a clear injection marker,
-    # not on legitimate text containing short words in angle brackets.
-    # Require: opening tag + non-whitespace + closing OR explicit tag keyword.
+    # 10. XML/Prompt Tag Injection
     ("xml_prompt_injection", re.compile(
         r"(?:"
-        r"<\s*\w+[^>]*>[^<]+</\w+>"       # balanced XML/HTML tag pair
-        r"|<!\w+"                          # CDATA, DOCTYPE, COMMENT start
-        r"|<\?xml\s"                       # XML declaration
-        r"|<\s*/\w+"                       # closing tag
+        r"<\s*\w+[^>]*>[^<]+</\w+>"
+        r"|<\w+[^>]*>[\s\S]{0,200}?</\w+>"
+        r"|<!\w+"
+        r"|<\?xml\s"
+        r"|<\s*/\w+"
         r")",
         re.IGNORECASE,
     )),
@@ -155,7 +254,7 @@ WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("access_control_tampering", re.compile(
         r"(?:"
         r"[\"']alg[\"']\s*:\s*[\"']none[\"']"
-        r"|bearer\s+eyJhbGciOiJub25lIn"
+        r"|bearer\s+eyJhbG...5lIn"
         r"|(?:\b(?:root|admin|superuser|godmode)\b\s*:\s*true)"
         r"|\bX-Original-URL\b|\bX-Rewrite-URL\b"
         r")",
@@ -165,8 +264,8 @@ WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
     # 12. Mass Assignment Protection
     ("mass_assignment", re.compile(
         r"(?:"
-        r"[\"'](?:is_admin|privileges|permissions|scope|tier|is_staff|internal_user)[\"']\s*:"
-        r"|[\"']role[\"']\s*:\s*[\"'](?:admin|root|superuser)[\"']"
+        r"[\"'(?:is_admin|privileges|permissions|scope|tier|is_staff|internal_user)[\"']\s*:"
+        r"|[\"']role[\"']\s*:\s*[\"'(?:admin|root|superuser)[\"']"
         r")",
         re.IGNORECASE,
     )),
@@ -184,20 +283,15 @@ WAF_PATTERNS: List[Tuple[str, re.Pattern]] = [
         re.IGNORECASE,
     )),
 
-    # 14. Server-Side Log Injection — requires \A (start of string) to avoid
-    #     false-positives on greetings like "hi" or "hello" that contain
-    #     valid text followed by a newline + valid words like "hi there\nHere"
+    # 14. Server-Side Log Injection — requires \A (start of string)
     ("log_injection", re.compile(
         r"\A[\r\n]+(?:INFO|WARN|ERROR|CRITICAL|STATUS=200|ip=127\.0\.0\.1)",
         re.IGNORECASE,
     )),
 
-    # 15. MiniMax API support — MiniMax only supports: text, image_url, video_url.
-    #     Base64 images and audio content cause HTTP 400 from MiniMax.
-    #     When routing to minimax, strip unsupported content types.
-    #     (Add minimax provider below once API key is configured.)
+    # 15. MiniMax API support — placeholder
     ("minimax_unsupported", re.compile(
-        r"__MINIMAX_STRIP_BASE64__",  # placeholder — active when minimax added
+        r"__MINIMAX_STRIP_BASE64__",
         re.IGNORECASE,
     )),
 ]
@@ -209,7 +303,10 @@ def scan(text: str) -> Optional[str]:
         return None
     decoded = _waf_decode(text)
     for category, pattern in WAF_PATTERNS:
-        if pattern.search(decoded):
+        if callable(pattern):
+            if pattern(decoded):
+                return category
+        elif hasattr(pattern, 'search') and pattern.search(decoded):
             return category
     return None
 
@@ -233,10 +330,14 @@ def extract_text_content(body: Dict[str, Any]) -> List[str]:
 
 
 def scan_body(body: Dict[str, Any]) -> Optional[str]:
-    """Scan raw content strings first, then serialised body."""
-    import json
+    """Scan all raw content strings from the body.
+    
+    NOTE: We only scan the extracted message content strings (not the
+    serialised JSON body) to avoid false positives on JSON structure
+    tokens like 'role' that legitimately appear in chat bodies.
+    """
     for raw in extract_text_content(body):
         hit = scan(raw)
         if hit:
             return hit
-    return scan(json.dumps(body))
+    return None

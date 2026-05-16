@@ -19,6 +19,7 @@ from chimera.providers.virtual_routes import RouteSpec
 
 # Shared HTTP client — set by lifespan in api/app.py
 _http_client: Optional[httpx.AsyncClient] = None
+_lock: asyncio.Lock = asyncio.Lock()
 
 
 def set_http_client(client: httpx.AsyncClient) -> None:
@@ -26,10 +27,36 @@ def set_http_client(client: httpx.AsyncClient) -> None:
     _http_client = client
 
 
+async def _ensure_http_client() -> httpx.AsyncClient:
+    """Lazily initialise the shared HTTP client if lifespan didn't set it."""
+    global _http_client
+    if _http_client is None:
+        import httpx as _httpx
+        async with _lock:
+            if _http_client is None:  # double-check after acquiring lock
+                logger.warning("get_http_client: lazily creating HTTP client (lifespan skipped?)")
+                _http_client = _httpx.AsyncClient(
+                    limits=_httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=30),
+                    timeout=_httpx.Timeout(120.0, connect=10.0),
+                    follow_redirects=False,
+                    http2=True,
+                )
+    return _http_client
+
+
 def get_http_client() -> httpx.AsyncClient:
     if _http_client is None:
-        raise RuntimeError("HTTP client not initialised")
+        # Return a blocking-safe placeholder; caller should use the async version.
+        # This prevents RuntimeError for sync code paths that call before lifespan.
+        raise RuntimeError(
+            "HTTP client not initialised — call ensure_http_client() from an async context"
+        )
+
     return _http_client
+
+
+async def ensure_http_client() -> httpx.AsyncClient:
+    return await _ensure_http_client()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -415,7 +442,7 @@ async def call_provider(
     for field in ("reasoning", "encrypt", "_route_mode", "_free_only", "_quarantined"):
         payload.pop(field, None)
 
-    client = get_http_client()
+    client = await ensure_http_client()
     timeout = httpx.Timeout(provider.get("timeout", 60.0))
 
     for attempt in range(3):

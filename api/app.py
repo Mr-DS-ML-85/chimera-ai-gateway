@@ -73,7 +73,10 @@ def _compute_fingerprint() -> str:
         f"waf_rule_version={WAF_RULE_VERSION}",
     ]
     for cat, pat in WAF_PATTERNS:
-        parts.append(f"waf:{cat}:{pat.pattern}")
+        try:
+            parts.append(f"waf:{cat}:{pat.pattern}")
+        except AttributeError:
+            parts.append(f"waf:{cat}:callable")
     for label, pat, token in PII_PATTERNS:
         parts.append(f"pii:{label}:{pat.pattern}:{token}")
     for pat in POLICY_PATTERNS:

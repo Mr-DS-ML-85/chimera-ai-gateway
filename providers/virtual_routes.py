@@ -31,7 +31,6 @@ def _chain(bucket: str, free_only: bool, mode: str) -> Tuple[str, ...]:
                 "google",
                 "cloudflare",
                 "huggingface",
-                "ollama",
             )
     else:
         if mode == "fast":
@@ -49,8 +48,7 @@ def _chain(bucket: str, free_only: bool, mode: str) -> Tuple[str, ...]:
                     "openrouter",
                     "cloudflare",
                     "nvidia",
-                    "huggingface",
-                    "ollama",
+                    "huggingface"
                 )
         elif mode == "quality":
             if free_only:
@@ -71,8 +69,7 @@ def _chain(bucket: str, free_only: bool, mode: str) -> Tuple[str, ...]:
                     "cloudflare",
                     "nvidia",
                     "deepseek",
-                    "huggingface",
-                    "ollama",
+                    "huggingface"
                 )
         else:  # balanced / auto
             if free_only:
@@ -93,8 +90,7 @@ def _chain(bucket: str, free_only: bool, mode: str) -> Tuple[str, ...]:
                     "nvidia",
                     "google",
                     "deepseek",
-                    "huggingface",
-                    "ollama",
+                    "huggingface"
                 )
 
     return chain
