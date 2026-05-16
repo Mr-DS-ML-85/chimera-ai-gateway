@@ -212,6 +212,20 @@ All virtual model aliases work with `/v1/messages`:
 
 Model alias shortcuts: `sonnet` → `claude-sonnet-4-7`, `opus` → `claude-opus-4-5`, `haiku` → `claude-haiku-4-7`
 
+### Model Name Rewriting for Claude Desktop
+
+Claude Desktop (and Cowork) validates model names in Gateway mode — only names containing `claude`, `sonnet`, `opus`, `haiku`, or `anthropic` are accepted (see [GitHub #56990](https://github.com/anthropics/claude-code/issues/56990)). Chimera automatically rewrites free/third-party model names to the `opencode-zen/` prefix so they pass validation while routing to the correct backend:
+
+| Client model name | Rewritten to |
+|---|---|
+| `minimax-m2.5-free` | `opencode-zen/minimax-m2.5-free` |
+| `gemini-3-flash` | `opencode-zen/gemini-3-flash` |
+| `glm-5` | `opencode-zen/glm-5` |
+| `qwq-32b` | `opencode-zen/qwq-32b` |
+| `gpt-oss-20b` | `opencode-zen/gpt-oss-20b` |
+
+This applies to both `/v1/chat/completions` and `/v1/messages` endpoints. No client config change needed — just use the model name as-is.
+
 ### Direct Anthropic API
 
 Set `ANTHROPIC_API_KEY` in `.env` to route directly to Anthropic for model names starting with `anthropic/`:
@@ -302,6 +316,10 @@ CUSTOM_OPENAI_BASE_URL=  # your vLLM / ollama server
 ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_BASE_URL=https://api.anthropic.com
 ANTHROPIC_TIMEOUT=120
+
+# OpenCode Zen — free model gateway (minimax-m2.5-free, gemini-3-flash, glm-5, etc.)
+# Also used for Claude Desktop model name rewriting (see README)
+OPENCODE_ZEN_API_KEY=
 
 # Security
 ENABLE_WAF=1

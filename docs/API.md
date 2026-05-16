@@ -116,10 +116,23 @@ Anthropic-native messages endpoint for Claude Code and Claude SDK compatibility.
 - `fast`, `fast:free`, `quality`, `balanced`
 - `reasoning`, `reasoning:free`, `non-reasoning`, `non-reasoning:free`
 
-**Model alias normalization:**
-- `sonnet` → `anthropic/claude-sonnet-4-7`
-- `opus` → `anthropic/claude-opus-4-5`
-- `haiku` → `anthropic/claude-haiku-4-7`
+**Model alias normalization (Anthropic shortcuts):**
+- `sonnet` → `anthropic/claude-sonnet-4-7-20250514`
+- `opus` → `anthropic/claude-3-7-sonnet-20250514`
+- `haiku` → `anthropic/claude-3.5-haiku-20241022`
+
+**Model name rewriting (Claude Desktop compatibility):**
+Claude Desktop validates model names — only accepts those containing `claude`, `sonnet`, `opus`, `haiku`, or `anthropic` (GitHub #56990). Chimera rewrites free/third-party model names automatically:
+
+| Client model | Rewritten to |
+|---|---|
+| `minimax-m2.5-free` | `opencode-zen/minimax-m2.5-free` |
+| `gemini-3-flash` | `opencode-zen/gemini-3-flash` |
+| `glm-5` | `opencode-zen/glm-5` |
+| `qwq-32b` | `opencode-zen/qwq-32b` |
+| `gpt-oss-20b` | `opencode-zen/gpt-oss-20b` |
+
+This works on both `/v1/chat/completions` and `/v1/messages` — no client config change needed.
 
 **Anthropic headers forwarded:**
 - `anthropic-beta` — enables beta features

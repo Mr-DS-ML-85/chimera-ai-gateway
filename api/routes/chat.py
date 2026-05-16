@@ -1090,6 +1090,24 @@ async def chat_completions(request: Request):
     if stream and body.get("encrypt"):
         raise HTTPException(400, {"error": "e2ee_stream_unsupported"})
 
+    # Model aliasing for non-Anthropic free/third-party models.
+    # Claude Desktop validates model names and only accepts those containing
+    # "claude", "sonnet", "opus", "haiku", or "anthropic" (GitHub #56990).
+    # Rewrite known free model names to opencode-zen/ prefix for correct routing.
+    requested_model_raw = str(body.get("model", "")).strip()
+    model_aliases = {
+        "minimax-m2.5-free": "opencode-zen/minimax-m2.5-free",
+        "minimax-m2.5": "opencode-zen/minimax-m2.5",
+        "minimax-m2": "opencode-zen/minimax-m2",
+        "gemini-3-flash": "opencode-zen/gemini-3-flash",
+        "glm-5": "opencode-zen/glm-5",
+        "gpt-oss-20b": "opencode-zen/gpt-oss-20b",
+        "qwq-32b": "opencode-zen/qwq-32b",
+    }
+    alias_key = requested_model_raw.lower().strip()
+    if alias_key in model_aliases:
+        body["model"] = model_aliases[alias_key]
+
     # Virtual routing resolution
     requested_model = str(body.get("model", "")).strip()
     route: Optional[RouteSpec] = resolve_virtual_model(
